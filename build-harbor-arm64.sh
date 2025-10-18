@@ -2,7 +2,7 @@
 
 # 配置参数
 # 分支名
-BRANCH="v2.11.2"
+BRANCH="v2.12.4"
 REPO_URL="https://gitee.com/liuli-ke/harbor-aarch64.git"
 REPO_DIR="harbor-aarch64"
 
