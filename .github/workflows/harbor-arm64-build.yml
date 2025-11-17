@@ -78,6 +78,7 @@ jobs:
         run: |
           cd harbor-aarch64
           chmod +x build-harbor.sh
+          echo "==> $DOCKER_USERNAME"
           ./build-harbor.sh
         env:
           HARBOR_TAG: ${{ env.HARBOR_TAG }}
