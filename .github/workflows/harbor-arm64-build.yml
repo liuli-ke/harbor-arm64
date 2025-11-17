@@ -26,6 +26,26 @@ on:
         description: 'Harbor TAG(拉取Harbor源代码使用)'
         required: true
         default: 'v2.14.0'
+      create_release:
+        description: '是否创建GitHub Release'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+      release_tag:
+        description: 'Release标签'
+        required: false
+        default: 'v2.14.0'
+      overwrite_release:
+        description: '是否覆盖已存在的Release'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 env:
   USE_BUILDX: ${{ inputs.use_buildx }}
@@ -33,6 +53,7 @@ env:
   DOCKER_PROJECT: ${{ inputs.docker_project }}
   HARBOR_IMAGE_TAG: ${{ inputs.harbor_image_tag }}
   HARBOR_TAG: ${{ inputs.harbor_tag }}
+  OVERWRITE_RELEASE: ${{ inputs.overwrite_release }}
 
 jobs:
   build-harbor:
@@ -66,3 +87,68 @@ jobs:
           DOCKER_PROJECT: ${{ env.DOCKER_PROJECT }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           USE_BUILDX: ${{ env.USE_BUILDX }}
+
+      - name: Check if Release exists
+        if: ${{ inputs.create_release == 'true' }}
+        id: check_release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const { data: release } = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag: '${{ inputs.release_tag }}'
+              });
+              console.log(`Release ${{ inputs.release_tag }} already exists`);
+              return true;
+            } catch (error) {
+              if (error.status === 404) {
+                console.log(`Release ${{ inputs.release_tag }} does not exist`);
+                return false;
+              }
+              throw error;
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create or Update Release
+        if: ${{ inputs.create_release == 'true' && (env.OVERWRITE_RELEASE == 'true' || !steps.check_release.outputs.result) }}
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          release_name: "Harbor ARM64 Images ${{ inputs.release_tag }}"
+          body: |
+            Harbor ARM64 镜像构建结果
+            
+            **构建信息:**
+            - Harbor 版本: ${{ env.HARBOR_TAG }}
+            - 镜像标签: 
+            - Docker镜像: ${{ env.DOCKER_PROJECT }}/${{ env.IMAGE_NAME }}:${{ env.HARBOR_IMAGE_TAG }}
+            
+            **包含内容:**
+            - Harbor ARM64 架构的离线安装包: harbor-offline-installer-aarch64-${{ env.HARBOR_TAG }}.tgz
+
+          draft: false
+          prerelease: false
+          overwrite: ${{ env.OVERWRITE_RELEASE == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip Release (already exists)
+        if: ${{ inputs.create_release == 'true' && env.OVERWRITE_RELEASE == 'false' && steps.check_release.outputs.result }}
+        run: |
+          echo "⚠️ Release ${{ inputs.release_tag }} already exists and overwrite is set to false"
+          echo "Skipping release creation to avoid overwriting existing release"
+
+      - name: Upload build artifacts to Release
+        if: ${{ inputs.create_release == 'true' && (env.OVERWRITE_RELEASE == 'true' || !steps.check_release.outputs.result) && steps.create_release.outputs.upload_url }}
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release-artifacts/*
+          tag_name: ${{ inputs.release_tag }}
+          overwrite: ${{ env.OVERWRITE_RELEASE == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
