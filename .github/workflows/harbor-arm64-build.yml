@@ -1,0 +1,68 @@
+name: Build Harbor ARM64 Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      use_buildx:
+        description: '是否使用Buildx(x86环境只能true)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+      image_name:
+        description: '镜像名称'
+        required: true
+        default: 'harbor_aarch64_images'
+      docker_project:
+        description: 'Docker项目名称(通常是docker hub 用户名)'
+        required: true
+        default: 'liulik'
+      harbor_image_tag:
+        description: 'Harbor镜像TAG(构建镜像使用)'
+        required: true
+        default: 'v2.14.0'
+      harbor_tag:
+        description: 'Harbor TAG(拉取Harbor源代码使用)'
+        required: true
+        default: 'v2.14.0'
+
+env:
+  USE_BUILDX: ${{ inputs.use_buildx }}
+  IMAGE_NAME: ${{ inputs.image_name }}
+  DOCKER_PROJECT: ${{ inputs.docker_project }}
+  HARBOR_IMAGE_TAG: ${{ inputs.harbor_image_tag }}
+  HARBOR_TAG: ${{ inputs.harbor_tag }}
+
+jobs:
+  build-harbor:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout current repository
+        uses: actions/checkout@v4
+
+      - name: Check and setup Docker environment
+        run: |
+          chmod +x .github/workflows/scripts/check-docker-env.sh
+          .github/workflows/scripts/check-docker-env.sh
+
+      - name: Clone harbor-aarch64 repository
+        run: |
+          git clone https://gitee.com/liuli-ke/harbor-aarch64.git
+          cd harbor-aarch64
+          ls -l
+
+      - name: Build Harbor images
+        run: |
+          cd harbor-aarch64
+          chmod +x build-harbor.sh
+          ./build-harbor.sh
+        env:
+          HARBOR_TAG: ${{ env.HARBOR_TAG }}
+          HARBOR_IMAGE_TAG: ${{ env.HARBOR_IMAGE_TAG }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          DOCKER_PROJECT: ${{ env.DOCKER_PROJECT }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          USE_BUILDX: ${{ env.USE_BUILDX }}
