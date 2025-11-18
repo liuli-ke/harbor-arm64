@@ -115,20 +115,44 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Delete existing Release and Tag
-        if: ${{ inputs.create_release == 'true' && env.OVERWRITE_RELEASE == 'true' }}
+      - name: Check if Release exists
+        id: check_release
+        if: ${{ inputs.create_release == 'true' || env.OVERWRITE_RELEASE == 'true' }}
         uses: actions/github-script@v7
         with:
           script: |
             try {
-              // 1. 检查Release是否存在
+              const { data: release } = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag: '${{ inputs.release_tag }}'
+              });
+              console.log(`ℹ️ Release ${{ inputs.release_tag }} exists`);
+              return true;
+            } catch (error) {
+              if (error.status === 404) {
+                console.log(`ℹ️ Release ${{ inputs.release_tag }} does not exist`);
+                return false;
+              }
+              throw error;
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete existing Release and Tag (Overwrite mode)
+        if: ${{ env.OVERWRITE_RELEASE == 'true' && inputs.create_release == 'true' && steps.check_release.outputs.result == 'true' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              // 1. 获取Release信息
               const { data: release } = await github.rest.repos.getReleaseByTag({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 tag: '${{ inputs.release_tag }}'
               });
 
-              // 2. 如果存在，先删除Release
+              // 2. 删除Release
               await github.rest.repos.deleteRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -147,16 +171,16 @@ jobs:
               return true;
             } catch (error) {
               if (error.status === 404) {
-                console.log('ℹ️ No existing release or tag found, proceeding to create.');
+                console.log('ℹ️ No existing release or tag found, nothing to delete.');
                 return false;
               }
-              throw error; // 重新抛出其他错误
+              throw error;
             }
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create or Update Release
-        if: ${{ inputs.create_release == 'true' && (env.OVERWRITE_RELEASE == 'true' || !steps.check_release.outputs.result) }}
+      - name: Create Release (New or Overwrite)
+        if: ${{ inputs.create_release == 'true' || (env.OVERWRITE_RELEASE == 'true' && steps.check_release.outputs.result == 'true') }}
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
@@ -177,8 +201,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Skip Release (Already exists and no overwrite)
+        if: ${{ inputs.create_release == 'true' && env.OVERWRITE_RELEASE == 'false' && steps.check_release.outputs.result == 'true' }}
+        run: |
+          echo "⚠️ Release ${{ inputs.release_tag }} already exists and overwrite is set to false"
+          echo "Skipping release creation to avoid overwriting existing release"
+
       - name: Upload build artifacts to Release
-        if: ${{ inputs.create_release == 'true' && (env.OVERWRITE_RELEASE == 'true' || !steps.check_release.outputs.result) && steps.create_release.outputs.upload_url }}
+        if: ${{ steps.create_release.outputs.upload_url != null }}
         uses: softprops/action-gh-release@v1
         with:
           files: |
