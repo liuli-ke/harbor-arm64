@@ -58,6 +58,8 @@ env:
 jobs:
   build-harbor:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout current repository
@@ -113,43 +115,74 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Delete existing Release and Tag
+        if: ${{ inputs.create_release == 'true' && env.OVERWRITE_RELEASE == 'true' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              // 1. 检查Release是否存在
+              const { data: release } = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag: '${{ inputs.release_tag }}'
+              });
+
+              // 2. 如果存在，先删除Release
+              await github.rest.repos.deleteRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.id
+              });
+              console.log(`✅ Release ${{ inputs.release_tag }} deleted`);
+
+              // 3. 删除关联的Git标签
+              await github.rest.git.deleteRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${{ inputs.release_tag }}`
+              });
+              console.log(`✅ Tag ${{ inputs.release_tag }} deleted`);
+
+              return true;
+            } catch (error) {
+              if (error.status === 404) {
+                console.log('ℹ️ No existing release or tag found, proceeding to create.');
+                return false;
+              }
+              throw error; // 重新抛出其他错误
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create or Update Release
         if: ${{ inputs.create_release == 'true' && (env.OVERWRITE_RELEASE == 'true' || !steps.check_release.outputs.result) }}
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ inputs.release_tag }}
-          release_name: "Harbor ARM64 Images ${{ inputs.release_tag }}"
+          name: "Harbor ARM64 Images ${{ inputs.release_tag }}"
           body: |
             Harbor ARM64 镜像构建结果
-            
+
             **构建信息:**
             - Harbor 版本: ${{ env.HARBOR_TAG }}
-            - 镜像标签: 
+            - 镜像标签: ${{ env.HARBOR_IMAGE_TAG }}
             - Docker镜像: ${{ env.DOCKER_PROJECT }}/${{ env.IMAGE_NAME }}:${{ env.HARBOR_IMAGE_TAG }}
-            
+
             **包含内容:**
             - Harbor ARM64 架构的离线安装包: harbor-offline-installer-aarch64-${{ env.HARBOR_TAG }}.tgz
-
           draft: false
           prerelease: false
-          overwrite: ${{ env.OVERWRITE_RELEASE == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Skip Release (already exists)
-        if: ${{ inputs.create_release == 'true' && env.OVERWRITE_RELEASE == 'false' && steps.check_release.outputs.result }}
-        run: |
-          echo "⚠️ Release ${{ inputs.release_tag }} already exists and overwrite is set to false"
-          echo "Skipping release creation to avoid overwriting existing release"
 
       - name: Upload build artifacts to Release
         if: ${{ inputs.create_release == 'true' && (env.OVERWRITE_RELEASE == 'true' || !steps.check_release.outputs.result) && steps.create_release.outputs.upload_url }}
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            release-artifacts/*
+            harbor-aarch64/all-in-one/harbor-offline-installer-aarch64-${{ env.HARBOR_TAG }}.tgz
           tag_name: ${{ inputs.release_tag }}
-          overwrite: ${{ env.OVERWRITE_RELEASE == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
