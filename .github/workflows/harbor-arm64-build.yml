@@ -92,30 +92,6 @@ jobs:
           USE_BUILDX: ${{ env.USE_BUILDX }}
 
       - name: Check if Release exists
-        if: ${{ inputs.create_release == 'true' }}
-        id: check_release
-        uses: actions/github-script@v7
-        with:
-          script: |
-            try {
-              const { data: release } = await github.rest.repos.getReleaseByTag({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag: '${{ inputs.release_tag }}'
-              });
-              console.log(`Release ${{ inputs.release_tag }} already exists`);
-              return true;
-            } catch (error) {
-              if (error.status === 404) {
-                console.log(`Release ${{ inputs.release_tag }} does not exist`);
-                return false;
-              }
-              throw error;
-            }
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check if Release exists
         id: check_release
         if: ${{ inputs.create_release == 'true' || env.OVERWRITE_RELEASE == 'true' }}
         uses: actions/github-script@v7
