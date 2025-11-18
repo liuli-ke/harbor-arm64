@@ -161,7 +161,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ inputs.release_tag }}
-          name: "Harbor ARM64 Images ${{ inputs.release_tag }}"
+          name: "${{ inputs.release_tag }}"
           body: |
             Harbor ARM64 镜像构建结果
 
