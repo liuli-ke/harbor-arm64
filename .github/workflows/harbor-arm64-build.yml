@@ -85,8 +85,13 @@ jobs:
         run: |
           cd harbor-aarch64
           chmod +x build-harbor.sh
-          ./build-harbor.sh
+          ./build-harbor.sh || build_status=$?
           cd  ../ && bash .github/workflows/scripts/show-images-info.sh
+          # 如果构建失败，则退出并返回构建状态码
+          if [ -n "${build_status:-}" ]; then
+            echo "❌ Harbor 构建失败，退出码: $build_status"
+            exit $build_status
+          fi
         env:
           HARBOR_TAG: ${{ env.HARBOR_TAG }}
           HARBOR_IMAGE_TAG: ${{ env.HARBOR_IMAGE_TAG }}
