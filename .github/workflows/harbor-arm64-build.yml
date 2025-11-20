@@ -46,6 +46,30 @@ on:
         options:
           - 'true'
           - 'false'
+      release_notes:
+        description: '自定义 Release 说明'
+        required: false
+        type: string
+        default: ''
+      release_name:
+        description: 'Release 名称（可选，默认为标签名）'
+        required: false
+        type: string
+      release_draft:
+        description: '是否作为草稿发布'
+        required: false
+        type: boolean
+        default: false
+      release_prerelease:
+        description: '是否作为预发布版本'
+        required: false
+        type: boolean
+        default: false
+      make_latest:
+        description: '是否设置为 Latest Release'
+        required: false
+        type: boolean
+        default: false
 
 env:
   USE_BUILDX: ${{ inputs.use_buildx }}
@@ -161,7 +185,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ inputs.release_tag }}
-          name: "${{ inputs.release_tag }}"
+          name: "${{ inputs.release_name || inputs.release_tag }}"
           body: |
             Harbor ARM64 镜像构建结果
 
@@ -172,8 +196,11 @@ jobs:
 
             **包含内容:**
             - Harbor ARM64 架构的离线安装包: harbor-offline-installer-aarch64-${{ env.HARBOR_TAG }}.tgz
-          draft: false
-          prerelease: false
+            
+            ${{ inputs.release_notes }}
+          draft: ${{ inputs.release_draft }}
+          prerelease: ${{ inputs.release_prerelease }}
+          make_latest: ${{ inputs.make_latest }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
