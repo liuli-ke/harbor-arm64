@@ -46,30 +46,11 @@ on:
         options:
           - 'true'
           - 'false'
-      release_notes:
-        description: '自定义 Release 说明'
+      release_config:
+        description: 'Release配置 (格式: name:自定义名称,draft:false,prerelease:false,make_latest:false,notes:自定义说明)'
         required: false
         type: string
-        default: ''
-      release_name:
-        description: 'Release 名称（可选，默认为标签名）'
-        required: false
-        type: string
-      release_draft:
-        description: '是否作为草稿发布'
-        required: false
-        type: boolean
-        default: false
-      release_prerelease:
-        description: '是否作为预发布版本'
-        required: false
-        type: boolean
-        default: false
-      make_latest:
-        description: '是否设置为 Latest Release'
-        required: false
-        type: boolean
-        default: false
+        default: 'name:,draft:false,prerelease:false,make_latest:false,notes:'
 
 env:
   USE_BUILDX: ${{ inputs.use_buildx }}
@@ -114,6 +95,59 @@ jobs:
           DOCKER_PROJECT: ${{ env.DOCKER_PROJECT }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           USE_BUILDX: ${{ env.USE_BUILDX }}
+
+      - name: Parse Release Config
+        id: parse_release_config
+        if: ${{ inputs.create_release == 'true' || env.OVERWRITE_RELEASE == 'true' }}
+        run: |
+          CONFIG="${{ inputs.release_config }}"
+          
+          # 解析 name
+          if echo "$CONFIG" | grep -q 'name:[^,]*'; then
+            RELEASE_NAME=$(echo "$CONFIG" | grep -o 'name:[^,]*' | cut -d':' -f2-)
+            echo "release_name=$RELEASE_NAME" >> $GITHUB_OUTPUT
+          else
+            echo "release_name=" >> $GITHUB_OUTPUT
+          fi
+          
+          # 解析 draft
+          if echo "$CONFIG" | grep -q 'draft:[^,]*'; then
+            DRAFT=$(echo "$CONFIG" | grep -o 'draft:[^,]*' | cut -d':' -f2)
+            echo "draft=$DRAFT" >> $GITHUB_OUTPUT
+          else
+            echo "draft=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # 解析 prerelease
+          if echo "$CONFIG" | grep -q 'prerelease:[^,]*'; then
+            PRERELEASE=$(echo "$CONFIG" | grep -o 'prerelease:[^,]*' | cut -d':' -f2)
+            echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # 解析 make_latest
+          if echo "$CONFIG" | grep -q 'make_latest:[^,]*'; then
+            MAKE_LATEST=$(echo "$CONFIG" | grep -o 'make_latest:[^,]*' | cut -d':' -f2)
+            echo "make_latest=$MAKE_LATEST" >> $GITHUB_OUTPUT
+          else
+            echo "make_latest=false" >> $GITHUB_OUTPUT
+          fi
+          
+          # 解析 notes
+          if echo "$CONFIG" | grep -q 'notes:[^,]*'; then
+            NOTES=$(echo "$CONFIG" | grep -o 'notes:[^,]*' | cut -d':' -f2-)
+            echo "notes=$NOTES" >> $GITHUB_OUTPUT
+          else
+            echo "notes=" >> $GITHUB_OUTPUT
+          fi
+          
+          echo "Parsed release config:"
+          echo "name: $RELEASE_NAME"
+          echo "draft: $DRAFT"
+          echo "prerelease: $PRERELEASE"
+          echo "make_latest: $MAKE_LATEST"
+          echo "notes: $NOTES"
 
       - name: Check if Release exists
         id: check_release
@@ -185,7 +219,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ inputs.release_tag }}
-          name: "${{ inputs.release_name || inputs.release_tag }}"
+          name: "${{ steps.parse_release_config.outputs.release_name || inputs.release_tag }}"
           body: |
             Harbor ARM64 镜像构建结果
 
@@ -197,10 +231,10 @@ jobs:
             **包含内容:**
             - Harbor ARM64 架构的离线安装包: harbor-offline-installer-aarch64-${{ env.HARBOR_TAG }}.tgz
             
-            ${{ inputs.release_notes }}
-          draft: ${{ inputs.release_draft }}
-          prerelease: ${{ inputs.release_prerelease }}
-          make_latest: ${{ inputs.make_latest }}
+            ${{ steps.parse_release_config.outputs.notes }}
+          draft: ${{ steps.parse_release_config.outputs.draft }}
+          prerelease: ${{ steps.parse_release_config.outputs.prerelease }}
+          make_latest: ${{ steps.parse_release_config.outputs.make_latest }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
