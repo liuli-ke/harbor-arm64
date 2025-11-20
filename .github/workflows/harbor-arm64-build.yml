@@ -85,8 +85,8 @@ jobs:
         run: |
           cd harbor-aarch64
           chmod +x build-harbor.sh
-          echo "==> $DOCKER_USERNAME"
           ./build-harbor.sh
+          cd  ../ && bash .github/workflows/scripts/show-images-info.sh
         env:
           HARBOR_TAG: ${{ env.HARBOR_TAG }}
           HARBOR_IMAGE_TAG: ${{ env.HARBOR_IMAGE_TAG }}
