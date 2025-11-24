@@ -77,7 +77,21 @@ jobs:
 
       - name: Clone harbor-aarch64 repository
         run: |
-          git clone https://gitee.com/liuli-ke/harbor-aarch64.git
+          set -e
+          if [ -n "${{ secrets.GITEE_TOKEN }}" ]; then
+            echo "Using Token Authentication For Gitee"
+            git clone https://liuli-ke:${{ secrets.GITEE_TOKEN }}@gitee.com/liuli-ke/harbor-aarch64.git || {
+              echo "[ERROR]: Failed to clone repository with Token Authentication"
+              exit 1
+            }
+          else
+            echo "GITEE_TOKEN not found, attempting anonymous clone"
+            git clone https://gitee.com/liuli-ke/harbor-aarch64.git || {
+              echo "[ERROR]: Failed to clone repository anonymously"
+              echo "[Note]: Private repositories usually Require Authentication"
+              exit 1
+            }
+          fi
           cd harbor-aarch64
           ls -l
 
