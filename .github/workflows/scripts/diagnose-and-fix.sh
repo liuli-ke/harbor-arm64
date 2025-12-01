@@ -173,8 +173,15 @@ generate_report() {
     echo "💾 内存使用率: ${MEM_USAGE}"
 
     # Docker 磁盘使用
-    DOCKER_USAGE=$(docker system df --format '{{.TotalSize}}' | head -1)
-    echo "🐳 Docker 占用空间: ${DOCKER_USAGE:-未知}"
+    # 尝试多种方法获取磁盘使用情况
+    local usage=""
+    # 方法1：使用标准输出解析
+    usage=$(docker system df 2>/dev/null | awk 'NR==2{print $3}')
+    if [ -z "$usage" ] || [ "$usage" = "SIZE" ]; then
+        # 方法2：使用格式化输出
+        usage=$(docker system df --format "table {{.Size}}" 2>/dev/null | tail -n +2 | head -1)
+    fi
+    echo "🐳 Docker 占用空间: ${usage:-未知}"
 
     # Harbor 镜像状态
     HARBOR_IMAGES=$(docker images | grep -c "harbor\|goharbor" || true)
