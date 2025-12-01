@@ -104,6 +104,8 @@ jobs:
           # 如果构建失败，则退出并返回构建状态码
           if [ -n "${build_status:-}" ]; then
             echo "❌ Harbor 构建失败，退出码: $build_status"
+            echo "🚨 运行诊断脚本..."
+            bash .github/workflows/scripts/diagnose-and-fix.sh
             exit $build_status
           fi
         env:
@@ -114,6 +116,30 @@ jobs:
           DOCKER_PROJECT: ${{ env.DOCKER_PROJECT }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
           USE_BUILDX: ${{ env.USE_BUILDX }}
+
+      # 错误后重试构建
+      - name: Retry build after Error
+        if: failure()
+        run: |
+          echo "🔄 诊断后重试构建..."
+          cd harbor-aarch64
+          # 清理可能干扰的环境
+          docker builder prune -a -f || true
+          docker system prune -a -f || true
+          docker volume prune -f || true
+          rm -rf /tmp/go-build* || true
+          ./build-harbor.sh || build_status=$?
+          cd  ../ && bash .github/workflows/scripts/show-images-info.sh
+          # 如果构建失败，则退出并返回构建状态码
+          if [ -n "${build_status:-}" ]; then
+            echo "❌ Harbor 构建失败，退出码: $build_status"
+            echo "🚨 运行诊断脚本..."
+            bash .github/workflows/scripts/diagnose-and-fix.sh
+            exit $build_status
+          fi
+        env:
+          HARBOR_TAG: ${{ env.HARBOR_TAG }}
+          HARBOR_IMAGE_TAG: ${{ env.HARBOR_IMAGE_TAG }}
 
       - name: Parse Release Config
         id: parse_release_config
