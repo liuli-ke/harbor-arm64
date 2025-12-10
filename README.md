@@ -1,18 +1,23 @@
 # Harbor ARM64
 
+> 低版本没有计划构建
+
 ## 从镜像里获取离线安装包
 
 ```bash
-下载离线镜像包
+# 下载离线镜像包
 docker pull liulik/harbor_images_aarch64:v2.14.0
 
-创建一个新的容器实例
+# 创建一个新的容器实例
+## v2.11.2 v2.12.0 v2.12.1 v2.12.2 v2.12.3 v2.12.4 v2.13.0 v2.13.1 v2.13.2 v2.14.0 可用
 TEMP_CONTAINER_ID=$(docker create liulik/harbor_images_aarch64:v2.14.0 /bin/true)
+## v2.13.0+ 可用
+TEMP_CONTAINER_ID=$(docker create liulik/harbor_aarch64_images:v2.14.1 /bin/true)
 
-从容器中拷贝文件
+# 从容器中拷贝文件
 docker cp $TEMP_CONTAINER_ID:/harbor-offline-installer-aarch64-v2.14.0.tgz ./harbor-offline-installer-aarch64-v2.14.0.tgz
 
-删除容器实例
+# 删除容器实例
 docker rm $TEMP_CONTAINER_ID
 ```
 
