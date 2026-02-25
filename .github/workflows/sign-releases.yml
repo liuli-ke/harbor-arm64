@@ -1,6 +1,8 @@
 name: Generate Sigstore signatures and md5sum for Releases
 
 on:
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -24,13 +26,20 @@ jobs:
         with:
           cosign-release: 'v2.2.4'
 
-      - name: Get list of releases
+      - name: Get list of releases to process
         id: get_releases
         run: |
-          if [ -z "${{ github.event.inputs.release_tag }}" ]; then
-            releases=$(gh release list --json tagName --jq '.[].tagName')
+          # 判断触发方式
+          if [ "${{ github.event_name }}" == "release" ]; then
+            # Release 触发：只处理当前发布的 tag
+            releases="${{ github.event.release.tag_name }}"
           else
-            releases="${{ github.event.inputs.release_tag }}"
+            # workflow_dispatch 触发：根据输入处理
+            if [ -z "${{ github.event.inputs.release_tag }}" ]; then
+              releases=$(gh release list --json tagName --jq '.[].tagName')
+            else
+              releases="${{ github.event.inputs.release_tag }}"
+            fi
           fi
           echo "releases<<EOF" >> $GITHUB_OUTPUT
           echo "$releases" >> $GITHUB_OUTPUT
@@ -76,7 +85,6 @@ jobs:
                   echo "为 $file 生成 Sigstore 签名 ..."
                   cosign sign-blob --yes --output-signature "$sigfile" "$file"
                   echo "上传 $sigfile 到 Release $tag ..."
-                  # 手动重试最多5次
                   success=0
                   for attempt in {1..5}; do
                     if gh release upload "$tag" "$sigfile" --clobber; then
