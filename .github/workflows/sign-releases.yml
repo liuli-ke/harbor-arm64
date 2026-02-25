@@ -32,6 +32,7 @@ jobs:
           else
             releases="${{ github.event.inputs.release_tag }}"
           fi
+          # 使用 heredoc 输出多行
           echo "releases<<EOF" >> $GITHUB_OUTPUT
           echo "$releases" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -40,7 +41,7 @@ jobs:
 
       - name: Process each release
         run: |
-          # 使用 while read 逐行处理 releases 输出，避免语法错误
+          # 逐行读取 releases，避免 shell 语法错误
           echo "${{ steps.get_releases.outputs.releases }}" | while read tag; do
               if [ -z "$tag" ]; then
                   continue
@@ -77,7 +78,8 @@ jobs:
                   echo "为 $file 生成 Sigstore 签名 ..."
                   cosign sign-blob --yes --output-signature "$sigfile" "$file"
                   echo "上传 $sigfile 到 Release $tag ..."
-                  gh release upload "$tag" "$sigfile" --clobber
+                  # 添加 --retry 5 自动重试临时网络故障
+                  gh release upload "$tag" "$sigfile" --clobber --retry 5
                 fi
               done
 
@@ -88,7 +90,7 @@ jobs:
                 echo "生成 md5sum 文件 ..."
                 md5sum $tgz_files > md5sum
                 echo "上传 md5sum 到 Release $tag ..."
-                gh release upload "$tag" "md5sum" --clobber
+                gh release upload "$tag" "md5sum" --clobber --retry 3
               fi
 
               cd "${{ github.workspace }}"
