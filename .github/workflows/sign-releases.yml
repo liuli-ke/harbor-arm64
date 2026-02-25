@@ -40,56 +40,60 @@ jobs:
 
       - name: Process each release
         run: |
-          for tag in ${{ steps.get_releases.outputs.releases }}; do
-            echo "========================================="
-            echo "处理 Release: $tag"
-            echo "========================================="
-
-            assets=$(gh release view "$tag" --json assets --jq '.assets[].name')
-            tgz_files=$(echo "$assets" | grep '^harbor-offline-installer-aarch64-.*\.tgz$' || true)
-
-            if [ -z "$tgz_files" ]; then
-              echo "在 Release $tag 中未找到 aarch64 tgz 文件，跳过。"
-              continue
-            fi
-            echo "找到的 tgz 文件：$tgz_files"
-
-            tmp_dir="${{ github.workspace }}/temp_signing_$tag"
-            mkdir -p "$tmp_dir"
-            cd "$tmp_dir"
-
-            # 下载所有需要的 tgz 文件
-            for file in $tgz_files; do
-              echo "下载 $file ..."
-              gh release download "$tag" --pattern "$file" --dir .
-            done
-
-            # 为每个 tgz 文件生成 .sigstore.json 签名（如果缺失）
-            for file in $tgz_files; do
-              sigfile="${file}.sigstore.json"
-              if echo "$assets" | grep -q "^$sigfile$"; then
-                echo "签名文件 $sigfile 已存在，跳过。"
-              else
-                echo "为 $file 生成 Sigstore 签名 ..."
-                cosign sign-blob --yes --output-signature "$sigfile" "$file"
-                echo "上传 $sigfile 到 Release $tag ..."
-                gh release upload "$tag" "$sigfile" --clobber
+          # 使用 while read 逐行处理 releases 输出，避免语法错误
+          echo "${{ steps.get_releases.outputs.releases }}" | while read tag; do
+              if [ -z "$tag" ]; then
+                  continue
               fi
-            done
+              echo "========================================="
+              echo "处理 Release: $tag"
+              echo "========================================="
 
-            # 检查并生成 md5sum 文件（如果缺失）
-            if echo "$assets" | grep -q "^md5sum$"; then
-              echo "md5sum 文件已存在，跳过。"
-            else
-              echo "生成 md5sum 文件 ..."
-              md5sum $tgz_files > md5sum
-              echo "上传 md5sum 到 Release $tag ..."
-              gh release upload "$tag" "md5sum" --clobber
-            fi
+              assets=$(gh release view "$tag" --json assets --jq '.assets[].name')
+              tgz_files=$(echo "$assets" | grep '^harbor-offline-installer-aarch64-.*\.tgz$' || true)
 
-            cd "${{ github.workspace }}"
-            rm -rf "$tmp_dir"
-            echo "完成处理 Release $tag"
+              if [ -z "$tgz_files" ]; then
+                echo "在 Release $tag 中未找到 aarch64 tgz 文件，跳过。"
+                continue
+              fi
+              echo "找到的 tgz 文件：$tgz_files"
+
+              tmp_dir="${{ github.workspace }}/temp_signing_$tag"
+              mkdir -p "$tmp_dir"
+              cd "$tmp_dir"
+
+              # 下载所有需要的 tgz 文件
+              for file in $tgz_files; do
+                echo "下载 $file ..."
+                gh release download "$tag" --pattern "$file" --dir .
+              done
+
+              # 为每个 tgz 文件生成 .sigstore.json 签名（如果缺失）
+              for file in $tgz_files; do
+                sigfile="${file}.sigstore.json"
+                if echo "$assets" | grep -q "^$sigfile$"; then
+                  echo "签名文件 $sigfile 已存在，跳过。"
+                else
+                  echo "为 $file 生成 Sigstore 签名 ..."
+                  cosign sign-blob --yes --output-signature "$sigfile" "$file"
+                  echo "上传 $sigfile 到 Release $tag ..."
+                  gh release upload "$tag" "$sigfile" --clobber
+                fi
+              done
+
+              # 检查并生成 md5sum 文件（如果缺失）
+              if echo "$assets" | grep -q "^md5sum$"; then
+                echo "md5sum 文件已存在，跳过。"
+              else
+                echo "生成 md5sum 文件 ..."
+                md5sum $tgz_files > md5sum
+                echo "上传 md5sum 到 Release $tag ..."
+                gh release upload "$tag" "md5sum" --clobber
+              fi
+
+              cd "${{ github.workspace }}"
+              rm -rf "$tmp_dir"
+              echo "完成处理 Release $tag"
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
