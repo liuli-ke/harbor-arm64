@@ -32,7 +32,9 @@ jobs:
           else
             releases="${{ github.event.inputs.release_tag }}"
           fi
-          echo "releases=$releases" >> $GITHUB_OUTPUT
+          echo "releases<<EOF" >> $GITHUB_OUTPUT
+          echo "$releases" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -52,7 +54,6 @@ jobs:
             fi
             echo "找到的 tgz 文件：$tgz_files"
 
-            # 在 github.workspace 下创建临时目录（父目录是 Git 仓库）
             tmp_dir="${{ github.workspace }}/temp_signing_$tag"
             mkdir -p "$tmp_dir"
             cd "$tmp_dir"
@@ -70,7 +71,6 @@ jobs:
                 echo "签名文件 $sigfile 已存在，跳过。"
               else
                 echo "为 $file 生成 Sigstore 签名 ..."
-                # 当前目录在 tmp_dir，父目录 ${{ github.workspace }} 有 .git，cosign 能自动找到
                 cosign sign-blob --yes --output-signature "$sigfile" "$file"
                 echo "上传 $sigfile 到 Release $tag ..."
                 gh release upload "$tag" "$sigfile" --clobber
