@@ -71,7 +71,7 @@ jobs:
               else
                 echo "为 $file 生成 Sigstore 签名 ..."
                 # 当前目录在 tmp_dir，父目录 ${{ github.workspace }} 有 .git，cosign 能自动找到
-                cosign sign-blob --output-signature "$sigfile" "$file"
+                cosign sign-blob --yes --output-signature "$sigfile" "$file"
                 echo "上传 $sigfile 到 Release $tag ..."
                 gh release upload "$tag" "$sigfile" --clobber
               fi
