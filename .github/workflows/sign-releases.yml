@@ -32,7 +32,6 @@ jobs:
           else
             releases="${{ github.event.inputs.release_tag }}"
           fi
-          # 使用 heredoc 输出多行
           echo "releases<<EOF" >> $GITHUB_OUTPUT
           echo "$releases" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -41,7 +40,6 @@ jobs:
 
       - name: Process each release
         run: |
-          # 逐行读取 releases，避免 shell 语法错误
           echo "${{ steps.get_releases.outputs.releases }}" | while read tag; do
               if [ -z "$tag" ]; then
                   continue
@@ -78,8 +76,21 @@ jobs:
                   echo "为 $file 生成 Sigstore 签名 ..."
                   cosign sign-blob --yes --output-signature "$sigfile" "$file"
                   echo "上传 $sigfile 到 Release $tag ..."
-                  # 添加 --retry 5 自动重试临时网络故障
-                  gh release upload "$tag" "$sigfile" --clobber --retry 5
+                  # 手动重试最多5次
+                  success=0
+                  for attempt in {1..5}; do
+                    if gh release upload "$tag" "$sigfile" --clobber; then
+                      success=1
+                      break
+                    else
+                      echo "上传失败 (尝试 $attempt/5)，5秒后重试..."
+                      sleep 5
+                    fi
+                  done
+                  if [ $success -eq 0 ]; then
+                    echo "错误：上传 $sigfile 失败，已重试5次。"
+                    exit 1
+                  fi
                 fi
               done
 
@@ -90,7 +101,20 @@ jobs:
                 echo "生成 md5sum 文件 ..."
                 md5sum $tgz_files > md5sum
                 echo "上传 md5sum 到 Release $tag ..."
-                gh release upload "$tag" "md5sum" --clobber --retry 3
+                success=0
+                for attempt in {1..3}; do
+                  if gh release upload "$tag" "md5sum" --clobber; then
+                    success=1
+                    break
+                  else
+                    echo "上传失败 (尝试 $attempt/3)，5秒后重试..."
+                    sleep 5
+                  fi
+                done
+                if [ $success -eq 0 ]; then
+                  echo "错误：上传 md5sum 失败，已重试3次。"
+                  exit 1
+                fi
               fi
 
               cd "${{ github.workspace }}"
