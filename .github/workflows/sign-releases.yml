@@ -16,6 +16,9 @@ jobs:
   process-releases:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
         with:
@@ -49,7 +52,9 @@ jobs:
             fi
             echo "找到的 tgz 文件：$tgz_files"
 
-            tmp_dir=$(mktemp -d)
+            # 在 github.workspace 下创建临时目录（父目录是 Git 仓库）
+            tmp_dir="${{ github.workspace }}/temp_signing_$tag"
+            mkdir -p "$tmp_dir"
             cd "$tmp_dir"
 
             # 下载所有需要的 tgz 文件
@@ -58,15 +63,6 @@ jobs:
               gh release download "$tag" --pattern "$file" --dir .
             done
 
-            # -------------------- 修复点：初始化临时 Git 仓库 --------------------
-            # 避免 cosign sign-blob 因缺少 Git 信息而失败
-            git init
-            git remote add origin "https://github.com/${{ github.repository }}"
-            # 可选：设置用户信息（cosign 通常不依赖，但设置也无妨）
-            git config user.email "actions@github.com"
-            git config user.name "GitHub Actions"
-            # -----------------------------------------------------------------
-
             # 为每个 tgz 文件生成 .sigstore.json 签名（如果缺失）
             for file in $tgz_files; do
               sigfile="${file}.sigstore.json"
@@ -74,6 +70,7 @@ jobs:
                 echo "签名文件 $sigfile 已存在，跳过。"
               else
                 echo "为 $file 生成 Sigstore 签名 ..."
+                # 当前目录在 tmp_dir，父目录 ${{ github.workspace }} 有 .git，cosign 能自动找到
                 cosign sign-blob --output-signature "$sigfile" "$file"
                 echo "上传 $sigfile 到 Release $tag ..."
                 gh release upload "$tag" "$sigfile" --clobber
@@ -90,7 +87,7 @@ jobs:
               gh release upload "$tag" "md5sum" --clobber
             fi
 
-            cd ..
+            cd "${{ github.workspace }}"
             rm -rf "$tmp_dir"
             echo "完成处理 Release $tag"
           done
