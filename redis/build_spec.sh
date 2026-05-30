@@ -138,7 +138,7 @@ function create_sandbox() {
   # replace toybox with coreutils and install default build tools
   run "Replace toybox with coreutils" in_sandbox tdnf remove -y toybox
   run "Upgrade Packages" in_sandbox tdnf upgrade -y
-  run "Install default build tools" in_sandbox tdnf install -y rpm-build build-essential gmp-devel mpfr-devel tar sed findutils file gzip patch bzip2 createrepo python3
+  run "Install default build tools" in_sandbox tdnf --nogpgcheck --disablerepo="*" --enablerepo=photon-updates --enablerepo=photon install -y rpm-build build-essential gmp-devel mpfr-devel tar sed findutils file gzip patch bzip2 createrepo python3
   run "Create local repo in sandbox" echo -e "[local]\nname=VMWare Photon Linux Local\nbaseurl=file:///usr/src/photon/RPMS\nenabled=1\nskip_if_unavailable=1" | sed 1d | docker exec -i $CONTAINER sh -c 'cat > /etc/yum.repos.d/local.repo'
 
   run "Create build template image for future use" docker commit "$(docker ps -q -f "name=$CONTAINER")" photon_build_spec:$VERSION.0
