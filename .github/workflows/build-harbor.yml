@@ -1,0 +1,100 @@
+# This workflow will build a golang project
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
+
+name: build-harbor
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_version:
+        description: "build_version"
+        required: true
+        default: "v2.15.0"
+      docker_project:
+        description: "Docker project (username or org)"
+        required: true
+        default: "liulik"
+      image_name:
+        description: "Image name"
+        required: true
+        default: "harbor_aarch64_images"
+
+env:
+  version: ${{ github.event.inputs.build_version }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: package_offline
+        id: image_tag
+        run: |
+          echo arch: $(arch)
+          echo version: ${{ env.version }}
+          id
+          bash build-harbor.sh
+
+      - name: Rename offline artifacts and Generate MD5 checksum
+        run: |
+          cd harbor
+          BASE="harbor-offline-installer-${{ env.version }}.tgz"
+          NEW_BASE="harbor-offline-installer-aarch64-${{ env.version }}.tgz"
+          
+          # 文件名问题处理
+          if [ -f "harbor-offline-installer-${{ env.version }}-legacy.tgz" ]; then
+            BASE="harbor-offline-installer-${{ env.version }}-legacy.tgz"
+            echo "Found legacy installer, Rename ${BASE} To ${NEW_BASE}"
+          fi
+          
+          # 重命名三个文件（若存在则移动，不存在则忽略）
+          mv -v ${BASE} ${NEW_BASE}
+          
+          ls -la
+          
+          # 生成md5
+          if [ -f "$NEW_BASE" ]; then
+            md5sum "$NEW_BASE" > "md5sum"
+            echo "$NEW_BASE md5sum: $(cat md5sum)"
+          else
+            echo "X $NEW_BASE not found!"
+            exit 1
+          fi
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v3
+        with:
+          context: .
+          push: true
+          build-args: version=${{ env.version }}
+          tags: ${{ github.event.inputs.docker_project }}/${{ github.event.inputs.image_name }}:${{ env.version }}
+          platforms: linux/amd64, linux/arm64
+          file: Dockerfile
+
+      - name: Upload artifacts to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.version }}
+          name: Release ${{ env.version }}
+          draft: false
+          prerelease: false
+          files: |
+            harbor/harbor-offline-installer-aarch64-${{ env.version }}.tgz
+            harbor/md5sum
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
