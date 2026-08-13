@@ -16,22 +16,25 @@ git clone --branch v${version} https://github.com/goharbor/harbor.git
 cd harbor
 
 # 指定版本需要替换photon基础镜像引用
-specified_versions=("2.15.1")
-if [[ " ${specified_versions[@]} " =~ " ${version} " ]]; then
-    find . -name Dockerfile.base | xargs sed -i 's#goharbor/photon:5.0#photon:5.0#g'
-fi
+# 如果有多个版本，可以用 | 分隔，例如 "2.15.1|v2.15.1"
+specified_versions="2.15.1|2.15.1-rc1|2.15.1-rc2"
+case ${version} in
+    $specified_versions)
+        find . -name Dockerfile.base | xargs sed -i 's#goharbor/photon:5.0#photon:5.0#g'
+        ;;
+esac
 
-sed -i 's#Linux-64bit.tar.gz#Linux-ARM64.tar.gz#g' ./Makefile 
+sed -i 's#Linux-64bit.tar.gz#Linux-ARM64.tar.gz#g' ./Makefile
 
-sed -i "s#VERSIONTAG=dev#VERSIONTAG=${version}#g" ./Makefile 
-sed -i "s#BASEIMAGETAG=dev#BASEIMAGETAG=${version}#g" ./Makefile 
-sed -i "s#PULL_BASE_FROM_DOCKERHUB=true#PULL_BASE_FROM_DOCKERHUB=false#g" ./Makefile 
-sed -i "s#BUILDBIN=false#BUILDBIN=true#g" ./Makefile 
-sed -i 's#--no-cache##g' make/photon/Makefile 
-sed -i 's#GOARCH=amd64#GOARCH=arm64#g' make/photon/exporter/Dockerfile 
-#sed -i '9aENV GOPROXY="https://goproxy.io"' make/photon/exporter/Dockerfile 
-#sed -i '2aENV GOPROXY="https://goproxy.io"' make/photon/registry/Dockerfile.binary 
-#sed -i '2aENV GOPROXY="https://goproxy.io"' tools/swagger/Dockerfile 
+sed -i "s#VERSIONTAG=dev#VERSIONTAG=${version}#g" ./Makefile
+sed -i "s#BASEIMAGETAG=dev#BASEIMAGETAG=${version}#g" ./Makefile
+sed -i "s#PULL_BASE_FROM_DOCKERHUB=true#PULL_BASE_FROM_DOCKERHUB=false#g" ./Makefile
+sed -i "s#BUILDBIN=false#BUILDBIN=true#g" ./Makefile
+sed -i 's#--no-cache##g' make/photon/Makefile
+sed -i 's#GOARCH=amd64#GOARCH=arm64#g' make/photon/exporter/Dockerfile
+#sed -i '9aENV GOPROXY="https://goproxy.io"' make/photon/exporter/Dockerfile
+#sed -i '2aENV GOPROXY="https://goproxy.io"' make/photon/registry/Dockerfile.binary
+#sed -i '2aENV GOPROXY="https://goproxy.io"' tools/swagger/Dockerfile
 
 sed -i 's#swagger_linux_amd64#swagger_linux_arm64#g' tools/swagger/Dockerfile
 # 调整版本信息
@@ -56,7 +59,7 @@ compare_versions() {
     # 如果循环结束还没有返回，说明两个版本号相等
     echo "0"
 }
-# 
+#
 if compare_versions 2.12.0  $version
 then
     # 2.12.2版本之前需要替换
@@ -82,7 +85,7 @@ USER redis
 CMD ["redis-server", "/etc/redis.conf"]
 EOF
 
-
-make package_offline
+# 构建镜像 (包括 trivy-adapter、harbor-exporter)
+make package_offline TRIVYFLAG=true EXPORTERFLAG=true
 
 ls
